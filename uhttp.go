@@ -12,8 +12,10 @@ import (
 	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 )
 
+const CUSTOM_TAG = "applicationName"
+
 // AppInsightsMiddleware logs requests to appInsights
-func AppInsightsMiddleware(client appinsights.TelemetryClient) func(next http.HandlerFunc) http.HandlerFunc {
+func AppInsightsMiddleware(client appinsights.TelemetryClient, appName string) func(next http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.String() == uhttp.NO_LOG_MAGIC_URL_FORCE_CACHE {
@@ -24,7 +26,9 @@ func AppInsightsMiddleware(client appinsights.TelemetryClient) func(next http.Ha
 			start := time.Now()
 			next.ServeHTTP(&airw, r)
 			duration := time.Since(start)
-			client.TrackRequest(r.Method, r.URL.EscapedPath(), duration, strconv.Itoa(airw.statusCode))
+			d := appinsights.NewRequestTelemetry(r.Method, r.URL.EscapedPath(), duration, strconv.Itoa(airw.statusCode))
+			d.Properties[CUSTOM_TAG] = appName
+			client.Track(d)
 		}
 	}
 }
@@ -68,8 +72,10 @@ func (w *appInsightsResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error
 	return h.Hijack()
 }
 
-func ForwardPanics(client appinsights.TelemetryClient) func(r *http.Request, err error) {
+func ForwardPanics(client appinsights.TelemetryClient, appName string) func(r *http.Request, err error) {
 	return func(r *http.Request, err error) {
-		client.TrackException(err)
+		d := appinsights.NewExceptionTelemetry(err)
+		d.Properties[CUSTOM_TAG] = appName
+		client.Track(d)
 	}
 }

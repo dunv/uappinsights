@@ -9,13 +9,15 @@ import (
 
 type LogWriter struct {
 	client          appinsights.TelemetryClient
+	appName         string
 	fieldMapping    [3][2]int
 	severityMapping map[string]contracts.SeverityLevel
 }
 
-func NewLogWriter(client appinsights.TelemetryClient) *LogWriter {
+func NewLogWriter(client appinsights.TelemetryClient, appName string) *LogWriter {
 	return &LogWriter{
-		client: client,
+		client:  client,
+		appName: appName,
 		fieldMapping: [3][2]int{
 			{26, 32},
 			{34},
@@ -38,6 +40,8 @@ func (w *LogWriter) SetFieldMapping(fieldMapping [3][2]int) {
 func (w *LogWriter) Write(p []byte) (n int, err error) {
 	log_level := bytes.TrimSpace(p[w.fieldMapping[0][0]:w.fieldMapping[0][1]])
 	message := bytes.TrimSpace(p[w.fieldMapping[1][0]:])
-	w.client.TrackTrace(string(message), w.severityMapping[string(log_level)])
+	d := appinsights.NewTraceTelemetry(string(message), w.severityMapping[string(log_level)])
+	d.Properties[CUSTOM_TAG] = w.appName
+	w.client.Track(d)
 	return len(p), nil
 }
