@@ -12,8 +12,6 @@ import (
 	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 )
 
-const CUSTOM_TAG = "applicationName"
-
 // AppInsightsMiddleware logs requests to appInsights
 func AppInsightsMiddleware(client appinsights.TelemetryClient, appName string) func(next http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
