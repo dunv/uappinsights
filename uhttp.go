@@ -3,9 +3,11 @@ package uappinsights
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dunv/uhttp"
@@ -25,16 +27,30 @@ func AppInsightsMiddleware(client appinsights.TelemetryClient, appName string) f
 			next.ServeHTTP(&airw, r)
 			duration := time.Since(start)
 			d := appinsights.NewRequestTelemetry(r.Method, r.URL.EscapedPath(), duration, strconv.Itoa(airw.statusCode))
+
+			// Add custom tag (for discrimination of multiple services within on instance of appinsights)
 			d.Properties[CUSTOM_TAG] = appName
+
+			// Add all query-params to the request to make it easier to figure out what went wrong
+			for k, v := range r.URL.Query() {
+				d.Properties[fmt.Sprintf("query__%s", k)] = strings.Join(v, ",")
+			}
+
+			// Add first couple of characters, in case the request failed
+			if airw.statusCode != http.StatusOK {
+				d.Properties["response__error"] = fmt.Sprintf("%s [...]", airw.errorResponse)
+			}
+
 			client.Track(d)
 		}
 	}
 }
 
 type appInsightsResponseWriter struct {
-	w           http.ResponseWriter
-	wroteHeader bool
-	statusCode  int
+	w             http.ResponseWriter
+	wroteHeader   bool
+	statusCode    int
+	errorResponse string
 }
 
 // Delegate Header() to underlying responseWriter
@@ -48,6 +64,14 @@ func (w *appInsightsResponseWriter) Write(data []byte) (int, error) {
 	// soon as write is called, if there are no headers written yet
 	if !w.wroteHeader {
 		w.WriteHeader(http.StatusOK)
+	}
+
+	if w.statusCode != http.StatusOK {
+		if len(data) > 200 {
+			w.errorResponse = string(data[:200])
+		} else {
+			w.errorResponse = string(data)
+		}
 	}
 	return w.w.Write(data)
 }
