@@ -2,6 +2,7 @@ package uappinsights
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,21 @@ import (
 	"github.com/microsoft/ApplicationInsights-Go/appinsights"
 )
 
+const APPINSIGHTS_REQUEST_TELEMETRY_CONTEXT_KEY = "appinsightsRequestTelemetry"
+
+// GetAppinsightsTelemetryFromContext extracts the RequestTelemetry from the request
+func GetAppinsightsTelemetryFromRequest(r *http.Request) *appinsights.RequestTelemetry {
+	return GetAppinsightsTelemetryFromContext(r.Context())
+}
+
+// GetAppinsightsTelemetryFromContext extracts the RequestTelemetry from the context
+func GetAppinsightsTelemetryFromContext(ctx context.Context) *appinsights.RequestTelemetry {
+	if d, ok := ctx.Value(APPINSIGHTS_REQUEST_TELEMETRY_CONTEXT_KEY).(*appinsights.RequestTelemetry); ok {
+		return d
+	}
+	return nil
+}
+
 // AppInsightsMiddleware logs requests to appInsights
 func AppInsightsMiddleware(client appinsights.TelemetryClient, appName string) func(next http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
@@ -23,10 +39,16 @@ func AppInsightsMiddleware(client appinsights.TelemetryClient, appName string) f
 				return
 			}
 			airw := appInsightsResponseWriter{w: w, statusCode: http.StatusOK}
+
+			d := appinsights.NewRequestTelemetry(r.Method, r.URL.EscapedPath(), 0*time.Second, strconv.Itoa(airw.statusCode))
+			ctx := context.WithValue(r.Context(), APPINSIGHTS_REQUEST_TELEMETRY_CONTEXT_KEY, d)
+			r = r.WithContext(ctx)
+
 			start := time.Now()
+
 			next.ServeHTTP(&airw, r)
-			duration := time.Since(start)
-			d := appinsights.NewRequestTelemetry(r.Method, r.URL.EscapedPath(), duration, strconv.Itoa(airw.statusCode))
+
+			d.Duration = time.Since(start)
 
 			// Add custom tag (for discrimination of multiple services within on instance of appinsights)
 			d.Properties[CUSTOM_TAG] = appName
