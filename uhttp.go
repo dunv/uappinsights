@@ -17,6 +17,17 @@ import (
 
 const APPINSIGHTS_REQUEST_TELEMETRY_CONTEXT_KEY = "appinsightsRequestTelemetry"
 
+// formatDuration formats a duration to appinsights' duration string format (taken from appinsights code)
+func formatDuration(d time.Duration) string {
+	ticks := int64(d/(time.Nanosecond*100)) % 10000000
+	seconds := int64(d/time.Second) % 60
+	minutes := int64(d/time.Minute) % 60
+	hours := int64(d/time.Hour) % 24
+	days := int64(d / (time.Hour * 24))
+
+	return fmt.Sprintf("%d.%02d:%02d:%02d.%07d", days, hours, minutes, seconds, ticks)
+}
+
 // GetAppinsightsTelemetryFromContext extracts the RequestTelemetry from the request
 func GetAppinsightsTelemetryFromRequest(r *http.Request) *appinsights.RequestTelemetry {
 	return GetAppinsightsTelemetryFromContext(r.Context())
@@ -28,6 +39,11 @@ func GetAppinsightsTelemetryFromContext(ctx context.Context) *appinsights.Reques
 		return d
 	}
 	return nil
+}
+
+// AddDurationProperty adds a duration property to a request telemetry
+func AddDurationProperty(d *appinsights.RequestTelemetry, what string, dur time.Duration) {
+	d.Properties[what] = formatDuration(dur)
 }
 
 // AppInsightsMiddleware logs requests to appInsights
